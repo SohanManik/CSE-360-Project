@@ -53,9 +53,21 @@ public class HomeController {
             		new Tab("Manage Group", AdminTabs.createViewArticleTabForInstructor()),
             		new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
             		new Tab("Backup Article", AdminTabs.createBackupArticlesTab()),
-            		new Tab("Restore Article", AdminTabs.createRestoreArticlesTab())
+            		new Tab("Restore Article", AdminTabs.createRestoreArticlesTab()),
+            		new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
+            		new Tab("View Articles", AdminTabs.createViewArticleTab())
             );
             vbox.getChildren().add(adminTabs);
+        }
+        
+        else if ("Student".equals(role)) {
+            TabPane studentTabs = new TabPane();
+            studentTabs.getTabs().addAll(
+                new Tab("Help System", StudentTabs.createHelpSystemTab()),
+                new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
+                new Tab("View Articles", AdminTabs.createViewArticleTab())
+            );
+            vbox.getChildren().add(studentTabs);
         }
         
         // Logout button for navigating back to the login page

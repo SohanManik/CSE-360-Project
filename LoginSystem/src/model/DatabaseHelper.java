@@ -281,6 +281,103 @@ public class DatabaseHelper {
             }
         }
         return false;    }
+    
+    
+    public List<String> searchArticles(String query, String level, String group) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT id, title, authors, abstractText FROM Articles WHERE 1=1");
+        List<Object> parameters = new ArrayList<>();
+
+        // Add search query to the SQL
+        if (!query.isEmpty()) {
+            sql.append(" AND (title LIKE ? OR authors LIKE ? OR abstractText LIKE ?)");
+            String likeQuery = "%" + query + "%";
+            parameters.add(likeQuery);
+            parameters.add(likeQuery);
+            parameters.add(likeQuery);
+        }
+
+        // Add level filtering if needed
+        if (!"All".equalsIgnoreCase(level)) {
+            sql.append(" AND keywords LIKE ?");
+            parameters.add("%" + level + "%");
+        }
+
+        // Add group filtering if needed
+        if (!"All".equalsIgnoreCase(group)) {
+            sql.append(" AND id IN (SELECT id FROM AccessRights WHERE groupId = ? AND canView = TRUE)");
+            parameters.add(group);
+        }
+
+        sql.append(" ORDER BY id");
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql.toString())) {
+            // Set parameters
+            for (int i = 0; i < parameters.size(); i++) {
+                pstmt.setObject(i + 1, parameters.get(i));
+            }
+
+            // Execute query and collect results
+            List<String> results = new ArrayList<>();
+            try (ResultSet rs = pstmt.executeQuery()) {
+                int sequence = 1;
+                while (rs.next()) {
+                    results.add(String.format("Seq: %d, Title: %s, Authors: %s, Abstract: %s",
+                            sequence++, rs.getString("title"), rs.getString("authors"), rs.getString("abstractText")));
+                }
+            }
+            return results;
+        }
+    }
+    
+    public String getArticleDetails(int sequence) throws SQLException {
+        String sql = "SELECT * FROM Articles ORDER BY id";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            try (ResultSet rs = pstmt.executeQuery()) {
+                int currentSequence = 1;
+                while (rs.next()) {
+                    if (currentSequence++ == sequence) {
+                        boolean isEncrypted = rs.getBoolean("isEncrypted");
+                        String body = rs.getString("body");
+
+                        // Decrypt body if encrypted
+                        if (isEncrypted) {
+                            body = decryptContent(body);
+                        }
+
+                        return String.format("ID: %d\nTitle: %s\nAuthors: %s\nAbstract: %s\nKeywords: %s\nBody: %s\nReferences: %s",
+                                rs.getInt("id"),
+                                rs.getString("title"),
+                                rs.getString("authors"),
+                                rs.getString("abstractText"),
+                                rs.getString("keywords"),
+                                body,
+                                rs.getString("references"));
+                    }
+                }
+            }
+        }
+        throw new SQLException("Article not found.");
+    }
+    
+    public String getLevelStatistics(List<String> articles) throws SQLException {
+        String sql = "SELECT keywords FROM Articles WHERE id IN (SELECT id FROM Articles)";
+        int beginnerCount = 0, intermediateCount = 0, advancedCount = 0, expertCount = 0;
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    String keywords = rs.getString("keywords").toLowerCase();
+                    if (keywords.contains("beginner")) beginnerCount++;
+                    if (keywords.contains("intermediate")) intermediateCount++;
+                    if (keywords.contains("advanced")) advancedCount++;
+                    if (keywords.contains("expert")) expertCount++;
+                }
+            }
+        }
+
+        return String.format("Beginner: %d, Intermediate: %d, Advanced: %d, Expert: %d",
+                beginnerCount, intermediateCount, advancedCount, expertCount);
+    }
 
 
 }
