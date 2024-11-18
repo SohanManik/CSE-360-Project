@@ -2,9 +2,7 @@ package model;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
+import java.util.*;
 
 public class DatabaseHelper {
     private static DatabaseHelper instance;
@@ -14,6 +12,10 @@ public class DatabaseHelper {
         connection = DriverManager.getConnection("jdbc:h2:~/test", "sa", "");
         setupDatabase();
     }
+    
+    public Connection getConnection() {
+        return connection;
+    }
 
     public static DatabaseHelper getInstance() throws SQLException {
         if (instance == null) instance = new DatabaseHelper();
@@ -21,35 +23,37 @@ public class DatabaseHelper {
     }
 
     private void setupDatabase() throws SQLException {
-        String createArticlesTable = """
-            CREATE TABLE IF NOT EXISTS Articles (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                title VARCHAR(255),
-                authors VARCHAR(255),
-                abstractText TEXT,
-                keywords VARCHAR(255),
-                body TEXT,
-                references TEXT
+        String createSpecialAccessGroupsTable = """
+            CREATE TABLE IF NOT EXISTS SpecialAccessGroups (
+                groupId VARCHAR(255) PRIMARY KEY,
+                groupName VARCHAR(255)
             );
         """;
-        
-        String addIsEncryptedColumnSQL = """
-                ALTER TABLE Articles ADD COLUMN IF NOT EXISTS isEncrypted BOOLEAN DEFAULT FALSE;
-            """;
-        
-        String createAccessRightsTable = """
-            CREATE TABLE IF NOT EXISTS AccessRights (
+
+        String createGroupUsersTable = """
+            CREATE TABLE IF NOT EXISTS GroupUsers (
                 groupId VARCHAR(255),
                 username VARCHAR(255),
+                role VARCHAR(50), -- admin, instructor, student
                 canView BOOLEAN DEFAULT FALSE,
                 canAdmin BOOLEAN DEFAULT FALSE,
                 PRIMARY KEY (groupId, username)
             );
         """;
+
+        String createGroupArticlesTable = """
+            CREATE TABLE IF NOT EXISTS GroupArticles (
+                groupId VARCHAR(255),
+                articleId INT,
+                PRIMARY KEY (groupId, articleId),
+                FOREIGN KEY (articleId) REFERENCES Articles(id)
+            );
+        """;
+
         try (Statement stmt = connection.createStatement()) {
-            stmt.execute(createArticlesTable);
-            stmt.execute(createAccessRightsTable);
-            stmt.execute(addIsEncryptedColumnSQL);
+            stmt.execute(createSpecialAccessGroupsTable);
+            stmt.execute(createGroupUsersTable);
+            stmt.execute(createGroupArticlesTable);
         }
     }
 
@@ -266,7 +270,10 @@ public class DatabaseHelper {
     }
 
     public static String decryptContent(String encryptedContent) {
-        // Simple example using Base64 (replace with a stronger algorithm for real-world use)
+        if (encryptedContent == null || encryptedContent.isEmpty()) {
+            return "";
+        }
+        // Use Base64 decoding (adjust if your encryption is different)
         return new String(Base64.getDecoder().decode(encryptedContent), StandardCharsets.UTF_8);
     }
     
@@ -377,6 +384,168 @@ public class DatabaseHelper {
 
         return String.format("Beginner: %d, Intermediate: %d, Advanced: %d, Expert: %d",
                 beginnerCount, intermediateCount, advancedCount, expertCount);
+    }
+
+ // Special Group Management
+    public void createSpecialAccessGroup(String groupName) throws SQLException {
+        String groupId = UUID.randomUUID().toString();
+        String sql = "INSERT INTO SpecialAccessGroups (groupId, groupName) VALUES (?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupId);
+            pstmt.setString(2, groupName);
+            pstmt.executeUpdate();
+        }
+    }
+
+    public String getGroupIdByName(String groupName) throws SQLException {
+        String sql = "SELECT groupId FROM SpecialAccessGroups WHERE groupName = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupName);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("groupId");
+                }
+            }
+        }
+        throw new SQLException("Group not found: " + groupName);
+    }
+
+    public void addUserToGroup(String groupId, String username, String role) throws SQLException {
+        String sqlInsertOrUpdate = """
+            MERGE INTO GroupUsers (groupId, username, role, canView, canAdmin)
+            VALUES (?, ?, ?, ?, ?)
+        """;
+
+        boolean isAdmin = false;
+        if (role.equalsIgnoreCase("Administrator")) {
+            isAdmin = true; // Admins get full access by default
+        }
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sqlInsertOrUpdate)) {
+            pstmt.setString(1, groupId);
+            pstmt.setString(2, username);
+            pstmt.setString(3, role);
+            pstmt.setBoolean(4, true); // Can view
+            pstmt.setBoolean(5, isAdmin); // Admin rights only if role is Admin
+            pstmt.executeUpdate();
+        }
+    }
+
+
+
+    public void grantAdminRights(String groupId, String username) throws SQLException {
+        updateUserPermissions(groupId, username, true, true);
+    }
+
+    public void grantViewRights(String groupId, String username) throws SQLException {
+        updateUserPermissions(groupId, username, true, false);
+    }
+
+    private void updateUserPermissions(String groupId, String username, boolean canView, boolean canAdmin) throws SQLException {
+        String sql = "UPDATE GroupUsers SET canView = ?, canAdmin = ? WHERE groupId = ? AND username = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setBoolean(1, canView);
+            pstmt.setBoolean(2, canAdmin);
+            pstmt.setString(3, groupId);
+            pstmt.setString(4, username);
+            pstmt.executeUpdate();
+        }
+    }
+
+    public List<Map<String, String>> getGroupUsers(String groupId) throws SQLException {
+        String sql = "SELECT username, role, canView, canAdmin FROM GroupUsers WHERE groupId = ?";
+        List<Map<String, String>> users = new ArrayList<>();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, String> user = new HashMap<>();
+                    user.put("username", rs.getString("username"));
+                    user.put("role", rs.getString("role"));
+                    user.put("canView", rs.getBoolean("canView") ? "Yes" : "No");
+                    user.put("canAdmin", rs.getBoolean("canAdmin") ? "Yes" : "No");
+                    users.add(user);
+                }
+            }
+        }
+        return users;
+    }
+    
+    public void addArticleToGroup(String groupId, int displayId, boolean encrypt) throws SQLException {
+        // Get the actual database ID for the given display ID
+        int articleId = getDatabaseIdForDisplayId(displayId);
+
+        // Check if the article exists in the database
+        String sqlCheckArticleExists = "SELECT COUNT(*) FROM Articles WHERE id = ?";
+        String sqlInsert = "INSERT INTO GroupArticles (groupId, articleId) VALUES (?, ?)";
+        String updateArticleSql = "UPDATE Articles SET isEncrypted = ? WHERE id = ?";
+
+        try (PreparedStatement pstmtCheckArticle = connection.prepareStatement(sqlCheckArticleExists)) {
+            pstmtCheckArticle.setInt(1, articleId);
+            try (ResultSet rs = pstmtCheckArticle.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    // Article exists, proceed to insert and encrypt
+                    try (PreparedStatement pstmtInsert = connection.prepareStatement(sqlInsert);
+                         PreparedStatement pstmtUpdate = connection.prepareStatement(updateArticleSql)) {
+
+                        // Add the article to the group
+                        pstmtInsert.setString(1, groupId);
+                        pstmtInsert.setInt(2, articleId);
+                        pstmtInsert.executeUpdate();
+
+                        // Update encryption status for the article
+                        pstmtUpdate.setBoolean(1, encrypt);
+                        pstmtUpdate.setInt(2, articleId);
+                        pstmtUpdate.executeUpdate();
+                    }
+                } else {
+                    throw new SQLException("Article with ID " + displayId + " does not exist.");
+                }
+            }
+        }
+    }
+
+
+    
+    public List<Map<String, String>> getArticlesInGroup(String groupId, String username) throws SQLException {
+        String sql = """
+            SELECT a.id, a.title, a.body, a.isEncrypted, gu.canView
+            FROM Articles a
+            JOIN GroupArticles ga ON a.id = ga.articleId
+            JOIN GroupUsers gu ON ga.groupId = gu.groupId
+            WHERE ga.groupId = ? AND gu.username = ?
+        """;
+
+        List<Map<String, String>> articles = new ArrayList<>();
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance();
+
+        try (PreparedStatement pstmt = dbHelper.getConnection().prepareStatement(sql)) {
+            pstmt.setString(1, groupId);
+            pstmt.setString(2, username);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, String> article = new HashMap<>();
+                    article.put("id", String.valueOf(rs.getInt("id")));
+                    article.put("title", rs.getString("title"));
+
+                    boolean canView = rs.getBoolean("canView");
+                    boolean isEncrypted = rs.getBoolean("isEncrypted");
+                    String body = rs.getString("body");
+
+                    if (canView) {
+                        body = isEncrypted ? DatabaseHelper.decryptContent(body) : body;
+                    } else {
+                        body = "No Permission";
+                    }
+
+                    article.put("body", body);
+                    articles.add(article);
+                }
+            }
+        }
+
+        return articles;
     }
 
 

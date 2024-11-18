@@ -24,63 +24,66 @@ public class HomeController {
     public void showHomePage() {
         VBox vbox = new VBox(10);
         vbox.getChildren().add(new Label("  Welcome, " + role + " " + user.getPreferredFirstNameOrDefault() + "!"));
-        
-        // If the user is an Administrator, display all admin tabs
+
         if ("Administrator".equals(role)) {
+            // Administrator Tabs
             TabPane adminTabs = new TabPane();
             adminTabs.getTabs().addAll(
-            		new Tab("Add Article", AdminTabs.createAddArticleTab()),
-            		new Tab("List Article", AdminTabs.createListArticlesTab()),
-            		new Tab("Manage Access", AdminTabs.createManageAccessRightsTab()),
-            		new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
-            		new Tab("Backup Article", AdminTabs.createBackupArticlesTab()),
-            		new Tab("Restore Article", AdminTabs.createRestoreArticlesTab()),
-                    new Tab("Invite User", AdminTabs.createInviteUserTab()),
-                    new Tab("Reset Account", AdminTabs.createResetUserTab()),
-                    new Tab("Delete User", AdminTabs.createDeleteUserTab()),
-                    new Tab("List Users", AdminTabs.createListUsersTab()),
-                    new Tab("Manage Roles", AdminTabs.createManageRolesTab())
+                new Tab("Add Article", AdminTabs.createAddArticleTab()),
+                new Tab("List Articles", AdminTabs.createListArticlesTab()),
+                new Tab("Manage Special Groups", AdminTabs.createManageSpecialAccessGroupsTab()),
+                new Tab("Grant Rights in Groups", AdminTabs.createManageAccessRightsTab()),
+                new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
+                new Tab("Backup Articles", AdminTabs.createBackupArticlesTab()),
+                new Tab("Restore Articles", AdminTabs.createRestoreArticlesTab()),
+                new Tab("Invite User", AdminTabs.createInviteUserTab()),
+                new Tab("Reset Account", AdminTabs.createResetUserTab()),
+                new Tab("Delete User", AdminTabs.createDeleteUserTab()),
+                new Tab("List Users", AdminTabs.createListUsersTab()),
+                new Tab("Manage Roles", AdminTabs.createManageRolesTab()),
+                new Tab("View Group Users", AdminTabs.createViewGroupUsersTab()),
+                new Tab("View Articles in Group", AdminTabs.createViewArticlesInGroupTab())
+
             );
             vbox.getChildren().add(adminTabs);
-        }
-        
-        // If the user is an Instructor, display a limited set of tabs
-        else if ("Instructor".equals(role)) {
-            TabPane adminTabs = new TabPane();
-            adminTabs.getTabs().addAll(
-            		new Tab("Add Article", AdminTabs.createAddArticleTab()),
-            		new Tab("List Article", AdminTabs.createListArticlesTab()),
-            		new Tab("Manage Group", AdminTabs.createViewArticleTabForInstructor()),
-            		new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
-            		new Tab("Backup Article", AdminTabs.createBackupArticlesTab()),
-            		new Tab("Restore Article", AdminTabs.createRestoreArticlesTab()),
-            		new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
-            		new Tab("View Articles", AdminTabs.createViewArticleTab())
+        } else if ("Instructor".equals(role)) {
+            // Instructor Tabs
+            TabPane instructorTabs = new TabPane();
+            instructorTabs.getTabs().addAll(
+                new Tab("Add Article", AdminTabs.createAddArticleTab()),
+                new Tab("List Articles", AdminTabs.createListArticlesTab()),
+                new Tab("Manage Special Groups", AdminTabs.createManageSpecialAccessGroupsTab()),
+                new Tab("View Articles", AdminTabs.createViewArticleTab()),
+                new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
+                new Tab("Backup Articles", AdminTabs.createBackupArticlesTab()),
+                new Tab("Restore Articles", AdminTabs.createRestoreArticlesTab()),
+                new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
+                new Tab("Manage Group Users", AdminTabs.createViewGroupUsersTab()),
+                new Tab("View Articles in Group", AdminTabs.createViewArticlesInGroupTab())
+
+
             );
-            vbox.getChildren().add(adminTabs);
-        }
-        
-        else if ("Student".equals(role)) {
+            vbox.getChildren().add(instructorTabs);
+        } else if ("Student".equals(role)) {
             TabPane studentTabs = new TabPane();
             studentTabs.getTabs().addAll(
                 new Tab("Help System", StudentTabs.createHelpSystemTab()),
                 new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
-                new Tab("View Articles", AdminTabs.createViewArticleTab())
+                new Tab("View Articles", AdminTabs.createViewArticleTab()),
+                new Tab("View Articles in Group", AdminTabs.createViewArticlesInGroupTab())
+
             );
             vbox.getChildren().add(studentTabs);
         }
-        
-        // Logout button for navigating back to the login page
+
+        // Logout Button
         Button logoutButton = new Button("Logout");
-        
         logoutButton.setOnAction(e -> {
-            // Redirect to the login page by initializing a new LoginController
             LoginController loginController = new LoginController(primaryStage);
             loginController.showLoginPage();
         });
-        
-        vbox.getChildren().add(logoutButton);				// Adding the logout button to the layout
-        
-        primaryStage.setScene(new Scene(vbox, 520, 560));	// Setting the scene with specified dimensions
+        vbox.getChildren().add(logoutButton);
+
+        primaryStage.setScene(new Scene(vbox, 520, 560));
     }
 }
