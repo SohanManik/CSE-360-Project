@@ -23,13 +23,20 @@ public class DatabaseHelper {
     }
 
     private void setupDatabase() throws SQLException {
-        // Table to store groups
-        String createSpecialAccessGroupsTable = """
-            CREATE TABLE IF NOT EXISTS SpecialAccessGroups (
-                groupId VARCHAR(255) PRIMARY KEY,
-                groupName VARCHAR(255) UNIQUE NOT NULL
-            );
-        """;
+    	    // Create or alter table to add missing columns
+    	    String createGroupsTable = """
+    	        CREATE TABLE IF NOT EXISTS SpecialAccessGroups (
+    	            groupId VARCHAR(255) PRIMARY KEY,
+    	            groupName VARCHAR(255) UNIQUE NOT NULL,
+    	            groupType VARCHAR(50) NOT NULL
+    	        );
+    	    """;
+
+    	    String alterGroupsTable = """
+    	        ALTER TABLE SpecialAccessGroups ADD COLUMN IF NOT EXISTS groupType VARCHAR(50) NOT NULL DEFAULT 'General';
+    	    """;
+
+    	    
 
         // Table to store users in groups with cascading delete on group deletion
         String createGroupUsersTable = """
@@ -56,8 +63,9 @@ public class DatabaseHelper {
         """;
 
         try (Statement stmt = connection.createStatement()) {
-            stmt.execute(createSpecialAccessGroupsTable);
-            stmt.execute(createGroupUsersTable);
+	        stmt.execute(createGroupsTable); // Create table if it doesn't exist
+	        stmt.execute(alterGroupsTable); // Add column if it doesn't exist
+	        stmt.execute(createGroupUsersTable);
             stmt.execute(createGroupArticlesTable);
         }
     }
@@ -404,16 +412,19 @@ public class DatabaseHelper {
                 beginnerCount, intermediateCount, advancedCount, expertCount);
     }
 
- // Special Group Management
-    public void createSpecialAccessGroup(String groupName) throws SQLException {
+ // Group Management
+    public void createGroup(String groupName, boolean isSpecialGroup) throws SQLException {
         String groupId = UUID.randomUUID().toString();
-        String sql = "INSERT INTO SpecialAccessGroups (groupId, groupName) VALUES (?, ?)";
+        String groupType = isSpecialGroup ? "Special" : "General";
+        String sql = "INSERT INTO SpecialAccessGroups (groupId, groupName, groupType) VALUES (?, ?, ?)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, groupId);
             pstmt.setString(2, groupName);
+            pstmt.setString(3, groupType);
             pstmt.executeUpdate();
         }
     }
+
 
     public String getGroupIdByName(String groupName) throws SQLException {
         String sql = "SELECT groupId FROM SpecialAccessGroups WHERE groupName = ?";
@@ -564,18 +575,17 @@ public class DatabaseHelper {
     }
     
     public void addArticleToGroup(String groupId, int articleId, boolean isEncrypted) throws SQLException {
-        System.out.println("Attempting to add articleId: " + articleId + " to groupId: " + groupId);
 
-        // Check if the article exists
+        // Query to validate the article ID
         String checkArticleSql = "SELECT id FROM Articles WHERE id = ?";
         try (PreparedStatement checkStmt = connection.prepareStatement(checkArticleSql)) {
             checkStmt.setInt(1, articleId);
             try (ResultSet rs = checkStmt.executeQuery()) {
                 if (!rs.next()) {
-                    System.out.println("Article with ID " + articleId + " not found in the database.");
-                    throw new SQLException("Article with ID " + articleId + " does not exist.");
+                    throw new SQLException("Article with ID " + articleId + " does not exist in Articles table.");
+                } else {
+                    System.out.println("Article with ID " + articleId + " exists in Articles table.");
                 }
-                System.out.println("Article with ID " + articleId + " exists in the database.");
             }
         }
 
@@ -588,8 +598,6 @@ public class DatabaseHelper {
             System.out.println("Article with ID " + articleId + " successfully added to groupId: " + groupId);
         }
     }
-
-
 
     
     public List<Map<String, String>> getArticlesInGroup(String groupId, String username) throws SQLException {

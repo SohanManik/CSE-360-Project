@@ -28,11 +28,10 @@ public class HomeController {
         if ("Administrator".equals(role)) {
             // Administrator Tabs
             TabPane adminTabs = new TabPane();
+            adminTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE); // Disable close button
             adminTabs.getTabs().addAll(
                 new Tab("Add Article", AdminTabs.createAddArticleTab()),
                 new Tab("List Articles", AdminTabs.createListArticlesTab()),
-                new Tab("Manage Special Groups", AdminTabs.createManageSpecialAccessGroupsTab()),
-                new Tab("Grant Rights in Groups", AdminTabs.createManageAccessRightsTab()),
                 new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
                 new Tab("Backup Articles", AdminTabs.createBackupArticlesTab()),
                 new Tab("Restore Articles", AdminTabs.createRestoreArticlesTab()),
@@ -41,37 +40,36 @@ public class HomeController {
                 new Tab("Delete User", AdminTabs.createDeleteUserTab()),
                 new Tab("List Users", AdminTabs.createListUsersTab()),
                 new Tab("Manage Roles", AdminTabs.createManageRolesTab()),
+                new Tab("Manage Groups", AdminTabs.createManageGroupsTab()),
                 new Tab("View Group Users", AdminTabs.createViewGroupUsersTab()),
                 new Tab("View Articles in Group", AdminTabs.createViewArticlesInGroupTab())
-
             );
             vbox.getChildren().add(adminTabs);
         } else if ("Instructor".equals(role)) {
             // Instructor Tabs
             TabPane instructorTabs = new TabPane();
+            instructorTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE); // Disable close button
             instructorTabs.getTabs().addAll(
                 new Tab("Add Article", AdminTabs.createAddArticleTab()),
                 new Tab("List Articles", AdminTabs.createListArticlesTab()),
-                new Tab("Manage Special Groups", AdminTabs.createManageSpecialAccessGroupsTab()),
                 new Tab("View Articles", AdminTabs.createViewArticleTab()),
                 new Tab("Delete Article", AdminTabs.createDeleteArticleTab()),
                 new Tab("Backup Articles", AdminTabs.createBackupArticlesTab()),
                 new Tab("Restore Articles", AdminTabs.createRestoreArticlesTab()),
                 new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
+                new Tab("Manage Groups", AdminTabs.createManageGroupsTab()),
                 new Tab("Manage Group Users", AdminTabs.createViewGroupUsersTab()),
                 new Tab("View Articles in Group", AdminTabs.createViewArticlesInGroupTab())
-
-
             );
             vbox.getChildren().add(instructorTabs);
         } else if ("Student".equals(role)) {
             TabPane studentTabs = new TabPane();
+            studentTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE); // Disable close button
             studentTabs.getTabs().addAll(
                 new Tab("Help System", StudentTabs.createHelpSystemTab()),
                 new Tab("Search Articles", StudentTabs.createSearchArticlesTab()),
                 new Tab("View Articles", AdminTabs.createViewArticleTab()),
                 new Tab("View Articles in Group", AdminTabs.createViewArticlesInGroupTab())
-
             );
             vbox.getChildren().add(studentTabs);
         }

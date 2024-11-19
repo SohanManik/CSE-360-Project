@@ -128,94 +128,7 @@ public class AdminTabs {
         return vbox;
     }
 
-    public static VBox createViewArticleTabForInstructor() {
-        VBox vbox = createVBoxWithPadding();
-
-        // Fields and controls for viewing an article
-        TextField articleIdField = new TextField();
-        TextArea articleDetailsArea = new TextArea();
-        articleDetailsArea.setEditable(false);
-        Label messageLabel = new Label();
-        Button viewArticleButton = new Button("View Article");
-
-        // Fields and controls for managing access rights
-        CheckBox viewRightsCheckBox = new CheckBox("Enable/Disable for general group");
-        CheckBox adminRightsCheckBox = new CheckBox("Enable/Disable for special access");
-        Button updateAccessButton = new Button("Update Article Group");
-
-        // View Article Button Logic
-        viewArticleButton.setOnAction(e -> {
-//            try {
-//                int articleId = Integer.parseInt(articleIdField.getText().trim());
-//                articleDetailsArea.setText(databaseHelper.viewArticle(articleId));
-//                // Fetch current rights for the article and set checkbox states
-//                String groupId = "article-" + articleId; // Assuming article ID maps to a group ID
-//                viewRightsCheckBox.setSelected(databaseHelper.hasGroupViewRights(groupId));
-//                adminRightsCheckBox.setSelected(databaseHelper.hasGroupAdminRights(groupId));
-//            } catch (Exception ex) {
-//                messageLabel.setText("Error viewing article: " + ex.getMessage());
-//            }
-        	try {
-                int displayId = Integer.parseInt(articleIdField.getText().trim());
-                int articleId = databaseHelper.getDatabaseIdForDisplayId(displayId);
-                String groupId = "article-" + articleId;
-
-                // Determine if the article is encrypted
-                boolean isEncrypted = databaseHelper.isArticleEncrypted(articleId);
-
-                // Enforce access rights rules based on encryption state
-                if (isEncrypted) {
-                    if (viewRightsCheckBox.isSelected()) {
-                        messageLabel.setText("Cannot grant view rights to encrypted articles.");
-                        return;
-                    }
-                    if (!adminRightsCheckBox.isSelected()) {
-                        messageLabel.setText("Encrypted articles must have admin rights enabled.");
-                        return;
-                    }
-                } else {
-                    if (!viewRightsCheckBox.isSelected()) {
-                        messageLabel.setText("Decrypted articles must have view rights enabled.");
-                        return;
-                    }
-                    if (adminRightsCheckBox.isSelected()) {
-                        messageLabel.setText("Cannot grant admin rights to decrypted articles.");
-                        return;
-                    }
-                }
-
-                // Update View Rights
-                if (viewRightsCheckBox.isSelected()) {
-                    databaseHelper.addGroupViewRights(groupId);
-                } else {
-                    databaseHelper.removeGroupViewRights(groupId);
-                }
-
-                // Update Admin Rights
-                if (adminRightsCheckBox.isSelected()) {
-                    databaseHelper.addGroupAdminRights(groupId);
-                } else {
-                    databaseHelper.removeGroupAdminRights(groupId);
-                }
-
-                messageLabel.setText("Group for the article updated successfully.");
-            } catch (Exception ex) {
-                messageLabel.setText("Error updating article group: " + ex.getMessage());
-            }
-        });
-
-        // Add fields and controls to the VBox
-        setupLabelAndField(vbox, "Article ID:", articleIdField);
-        vbox.getChildren().addAll(viewArticleButton, articleDetailsArea);
-        vbox.getChildren().addAll(
-                new Label("Manage Article Group"),
-                viewRightsCheckBox, adminRightsCheckBox,
-                updateAccessButton, messageLabel
-        );
-
-        return vbox;
-    }
-
+    
     public static VBox createDeleteArticleTab() {
         VBox vbox = createVBoxWithPadding();
         TextField articleIdField = new TextField();
@@ -367,53 +280,14 @@ public class AdminTabs {
         return vbox;
     }
     
-    public static VBox createManageAccessRightsTab() {
-        VBox vbox = createVBoxWithPadding();
-        TextField usernameField = new TextField();
-        CheckBox viewRightsCheckBox = new CheckBox("General");
-        CheckBox adminRightsCheckBox = new CheckBox("Special Access");
-        Label messageLabel = new Label();
-        Button updateAccessButton = new Button("Update Rights");
-
-        updateAccessButton.setOnAction(e -> {
-            try {
-                String username = usernameField.getText().trim();
-                boolean grantViewRights = viewRightsCheckBox.isSelected();
-                boolean grantAdminRights = adminRightsCheckBox.isSelected();
-
-                if (username.isEmpty()) {
-                    showMessage(messageLabel, "Username is required.");
-                    return;
-                }
-
-                User user = DataStore.getInstance().findUserByUsername(username);
-                if (user != null) {
-                    if (grantViewRights) { databaseHelper.addViewRights(user.getUsername());
-                    } else { databaseHelper.removeViewRights(user.getUsername()); }
-
-                    if (grantAdminRights) { databaseHelper.addAdminRights(user.getUsername());
-                    } else { databaseHelper.removeAdminRights(user.getUsername()); }
-
-                    showMessage(messageLabel, "Access rights updated successfully.");
-                } else {
-                    showMessage(messageLabel, "User not found.");
-                }
-            } catch (Exception ex) {
-                showMessage(messageLabel, "Error updating access rights: " + ex.getMessage());
-            }
-        });
-
-        addLabelAndFields(vbox,
-                new Label("  Username:"), usernameField,
-                viewRightsCheckBox, adminRightsCheckBox,
-                updateAccessButton, messageLabel);
-
-        return vbox;
-    }
-    
-    public static VBox createManageSpecialAccessGroupsTab() {
+    public static VBox createManageGroupsTab() {
         VBox vbox = createVBoxWithPadding();
         TextField groupNameField = new TextField();
+        RadioButton specialGroupRadio = new RadioButton("Special Group");
+        RadioButton generalGroupRadio = new RadioButton("General Group");
+        ToggleGroup groupTypeToggle = new ToggleGroup();
+        specialGroupRadio.setToggleGroup(groupTypeToggle);
+        generalGroupRadio.setToggleGroup(groupTypeToggle);
         TextField usernameField = new TextField();
         TextField articleIdField = new TextField();
         CheckBox adminRightsBox = new CheckBox("Grant Admin Rights");
@@ -439,8 +313,16 @@ public class AdminTabs {
                     return;
                 }
 
-                dbHelper.createSpecialAccessGroup(groupName);
-                messageLabel.setText("Group '" + groupName + "' created successfully.");
+                // Validate group type selection
+                if (groupTypeToggle.getSelectedToggle() == null) {
+                    messageLabel.setText("Please select the type of group (Special or General).");
+                    return;
+                }
+
+                boolean isSpecialGroup = specialGroupRadio.isSelected();
+                dbHelper.createGroup(groupName, isSpecialGroup); // Create the group
+                String groupType = isSpecialGroup ? "Special" : "General";
+                messageLabel.setText("Group '" + groupName + "' created successfully as a " + groupType + " group.");
             } catch (Exception ex) {
                 messageLabel.setText("Error: " + ex.getMessage());
             }
@@ -457,9 +339,12 @@ public class AdminTabs {
                     return;
                 }
 
+                // Determine the role based on the state of adminRightsBox
+                String role = adminRightsBox.isSelected() ? "Instructor" : "Viewer";
+
                 String groupId = dbHelper.getGroupIdByName(groupName);
-                dbHelper.addUserToGroup(groupId, username, "instructor"); // Assuming role "instructor" by default
-                messageLabel.setText("User '" + username + "' added to group '" + groupName + "'.");
+                dbHelper.addUserToGroup(groupId, username, role); // Pass the role as a String
+                messageLabel.setText("User '" + username + "' added to group '" + groupName + "' as " + role + ".");
             } catch (Exception ex) {
                 messageLabel.setText("Error: " + ex.getMessage());
             }
@@ -477,8 +362,8 @@ public class AdminTabs {
                 }
 
                 String groupId = dbHelper.getGroupIdByName(groupName);
-                dbHelper.addArticleToGroup(groupId, articleId, true);
-                messageLabel.setText("Article '" + articleId + "' added to group '" + groupName + "' and encrypted.");
+                dbHelper.addArticleToGroup(groupId, articleId, viewRightsBox.isSelected());
+                messageLabel.setText("Article '" + articleId + "' added to group '" + groupName + "'.");
             } catch (Exception ex) {
                 messageLabel.setText("Error: " + ex.getMessage());
             }
@@ -502,8 +387,10 @@ public class AdminTabs {
             }
         });
 
+        // Add components to the VBox
         vbox.getChildren().addAll(
             new Label("Group Name:"), groupNameField,
+            specialGroupRadio, generalGroupRadio,
             createGroupButton,
             new Label("Username:"), usernameField,
             adminRightsBox, viewRightsBox,
@@ -515,6 +402,8 @@ public class AdminTabs {
         );
         return vbox;
     }
+
+
 
     
     public static VBox createViewGroupUsersTab() {
