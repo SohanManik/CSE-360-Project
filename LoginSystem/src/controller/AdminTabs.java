@@ -429,6 +429,7 @@ public class AdminTabs {
             return vbox;
         }
 
+        // Button to create a new group
         Button createGroupButton = new Button("Create Group");
         createGroupButton.setOnAction(e -> {
             try {
@@ -445,6 +446,7 @@ public class AdminTabs {
             }
         });
 
+        // Button to add a user to the group
         Button addUserButton = new Button("Add User to Group");
         addUserButton.setOnAction(e -> {
             try {
@@ -456,13 +458,14 @@ public class AdminTabs {
                 }
 
                 String groupId = dbHelper.getGroupIdByName(groupName);
-                dbHelper.addUserToGroup(groupId, username, "instructor");
+                dbHelper.addUserToGroup(groupId, username, "instructor"); // Assuming role "instructor" by default
                 messageLabel.setText("User '" + username + "' added to group '" + groupName + "'.");
             } catch (Exception ex) {
                 messageLabel.setText("Error: " + ex.getMessage());
             }
         });
 
+        // Button to add an article to the group
         Button addArticleButton = new Button("Add Article to Group");
         addArticleButton.setOnAction(e -> {
             try {
@@ -481,6 +484,24 @@ public class AdminTabs {
             }
         });
 
+        // Button to delete a group
+        Button deleteGroupButton = new Button("Delete Group");
+        deleteGroupButton.setOnAction(e -> {
+            try {
+                String groupName = groupNameField.getText().trim();
+                if (groupName.isEmpty()) {
+                    messageLabel.setText("Group name cannot be empty.");
+                    return;
+                }
+
+                String groupId = dbHelper.getGroupIdByName(groupName);
+                dbHelper.deleteGroup(groupId);
+                messageLabel.setText("Group '" + groupName + "' deleted successfully.");
+            } catch (Exception ex) {
+                messageLabel.setText("Error: " + ex.getMessage());
+            }
+        });
+
         vbox.getChildren().addAll(
             new Label("Group Name:"), groupNameField,
             createGroupButton,
@@ -489,10 +510,12 @@ public class AdminTabs {
             addUserButton,
             new Label("Article ID:"), articleIdField,
             addArticleButton,
+            deleteGroupButton,
             messageLabel
         );
         return vbox;
     }
+
     
     public static VBox createViewGroupUsersTab() {
         VBox vbox = createVBoxWithPadding();
@@ -500,7 +523,7 @@ public class AdminTabs {
         Label messageLabel = new Label();
         TableView<Map<String, String>> userTable = new TableView<>();
 
-        // Setting up columns for the table
+        // Define table columns
         TableColumn<Map<String, String>, String> usernameColumn = new TableColumn<>("Username");
         usernameColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().get("username")));
 
@@ -515,47 +538,118 @@ public class AdminTabs {
 
         userTable.getColumns().addAll(usernameColumn, roleColumn, canViewColumn, canAdminColumn);
 
-        Button viewGroupButton = new Button("View Group Users");
-
-        DatabaseHelper dbHelper;
-        try {
-            dbHelper = DatabaseHelper.getInstance();
-        } catch (SQLException e) {
-            messageLabel.setText("Database initialization error: " + e.getMessage());
-            vbox.getChildren().add(messageLabel);
-            return vbox;
-        }
-
-        viewGroupButton.setOnAction(e -> {
+        // Button to fetch users in the group
+        Button viewUsersButton = new Button("View Group Users");
+        viewUsersButton.setOnAction(e -> {
             try {
                 String groupName = groupNameField.getText().trim();
                 if (groupName.isEmpty()) {
                     messageLabel.setText("Group name cannot be empty.");
+                    userTable.getItems().clear(); // Clear table if input is invalid
                     return;
                 }
 
+                // Fetch group ID and users
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance();
                 String groupId = dbHelper.getGroupIdByName(groupName);
-                List<Map<String, String>> users = dbHelper.getGroupUsers(groupId);
 
+                if (groupId == null) {
+                    messageLabel.setText("Group not found: " + groupName);
+                    userTable.getItems().clear(); // Clear table for non-existent group
+                    return;
+                }
+
+                List<Map<String, String>> users = dbHelper.getUsersInGroup(groupId);
                 userTable.getItems().clear();
                 userTable.getItems().addAll(users);
 
                 messageLabel.setText("Users in group '" + groupName + "' loaded successfully.");
             } catch (Exception ex) {
                 messageLabel.setText("Error: " + ex.getMessage());
+                userTable.getItems().clear(); // Clear table on error
             }
         });
 
+
+        // Button to update viewing rights
+        Button updateViewRightsButton = new Button("Update Viewing Rights");
+        updateViewRightsButton.setOnAction(e -> {
+            try {
+                Map<String, String> selectedUser = userTable.getSelectionModel().getSelectedItem();
+                if (selectedUser == null) {
+                    messageLabel.setText("Select a user to update viewing rights.");
+                    return;
+                }
+
+                String username = selectedUser.get("username");
+                String groupName = groupNameField.getText().trim();
+                if (groupName.isEmpty()) {
+                    messageLabel.setText("Group name cannot be empty.");
+                    return;
+                }
+
+                // Fetch group ID
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance();
+                String groupId = dbHelper.getGroupIdByName(groupName);
+
+                // Toggle viewing rights
+                boolean canView = selectedUser.get("canView").equals("Yes");
+                dbHelper.updateUserViewRights(groupId, username, !canView);
+
+                messageLabel.setText("Viewing rights for user '" + username + "' updated to " + (!canView ? "Yes" : "No") + ".");
+                viewUsersButton.fire(); // Refresh user list
+            } catch (Exception ex) {
+                messageLabel.setText("Error: " + ex.getMessage());
+            }
+        });
+
+        // Button to update admin rights
+        Button updateAdminRightsButton = new Button("Update Admin Rights");
+        updateAdminRightsButton.setOnAction(e -> {
+            try {
+                Map<String, String> selectedUser = userTable.getSelectionModel().getSelectedItem();
+                if (selectedUser == null) {
+                    messageLabel.setText("Select a user to update admin rights.");
+                    return;
+                }
+
+                String username = selectedUser.get("username");
+                String groupName = groupNameField.getText().trim();
+                if (groupName.isEmpty()) {
+                    messageLabel.setText("Group name cannot be empty.");
+                    return;
+                }
+
+                // Fetch group ID
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance();
+                String groupId = dbHelper.getGroupIdByName(groupName);
+
+                // Toggle admin rights
+                boolean canAdmin = selectedUser.get("canAdmin").equals("Yes");
+                dbHelper.updateUserAdminRights(groupId, username, !canAdmin);
+
+                messageLabel.setText("Admin rights for user '" + username + "' updated to " + (!canAdmin ? "Yes" : "No") + ".");
+                viewUsersButton.fire(); // Refresh user list
+            } catch (Exception ex) {
+                messageLabel.setText("Error: " + ex.getMessage());
+            }
+        });
+
+        // Add components to VBox
         vbox.getChildren().addAll(
             new Label("Group Name:"), groupNameField,
-            viewGroupButton, userTable, messageLabel
+            viewUsersButton, userTable,
+            updateViewRightsButton, updateAdminRightsButton,
+            messageLabel
         );
         return vbox;
     }
+
+
     
     public static VBox createViewArticlesInGroupTab() {
         VBox vbox = createVBoxWithPadding();
-        TextField groupNameField = new TextField();
+        TextField groupNameField = new TextField(); // Input for group name
         Label messageLabel = new Label();
         TableView<Map<String, String>> articlesTable = new TableView<>();
 
@@ -578,29 +672,44 @@ public class AdminTabs {
                 String groupName = groupNameField.getText().trim();
                 if (groupName.isEmpty()) {
                     messageLabel.setText("Group name cannot be empty.");
+                    articlesTable.getItems().clear(); // Clear table for invalid input
                     return;
                 }
 
-                // Fetch group ID and articles
                 DatabaseHelper dbHelper = DatabaseHelper.getInstance();
                 String groupId = dbHelper.getGroupIdByName(groupName);
-                List<Map<String, String>> articles = dbHelper.getArticlesInGroup(groupId, "yourUsernameHere"); // Replace with actual username
+
+                if (groupId == null) {
+                    messageLabel.setText("Group not found: " + groupName);
+                    articlesTable.getItems().clear(); // Clear table for non-existent group
+                    return;
+                }
+
+                String username = "yourLoggedInUsername"; // Replace with actual logged-in username
+                List<Map<String, String>> articles = dbHelper.getArticlesInGroup(groupId, username);
+
+                if (articles.isEmpty()) {
+                    messageLabel.setText("No articles found in group '" + groupName + "'.");
+                } else {
+                    messageLabel.setText("Articles in group '" + groupName + "' loaded successfully.");
+                }
 
                 articlesTable.getItems().clear();
                 articlesTable.getItems().addAll(articles);
-
-                messageLabel.setText("Articles in group '" + groupName + "' loaded successfully.");
             } catch (Exception ex) {
                 messageLabel.setText("Error: " + ex.getMessage());
+                articlesTable.getItems().clear(); // Clear table on error
             }
         });
 
+
+
+        // Add UI components to the layout
         vbox.getChildren().addAll(
             new Label("Group Name:"), groupNameField,
             viewArticlesButton, articlesTable, messageLabel
         );
         return vbox;
     }
-
 
 }

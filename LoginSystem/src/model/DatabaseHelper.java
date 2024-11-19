@@ -23,13 +23,15 @@ public class DatabaseHelper {
     }
 
     private void setupDatabase() throws SQLException {
+        // Table to store groups
         String createSpecialAccessGroupsTable = """
             CREATE TABLE IF NOT EXISTS SpecialAccessGroups (
                 groupId VARCHAR(255) PRIMARY KEY,
-                groupName VARCHAR(255)
+                groupName VARCHAR(255) UNIQUE NOT NULL
             );
         """;
 
+        // Table to store users in groups with cascading delete on group deletion
         String createGroupUsersTable = """
             CREATE TABLE IF NOT EXISTS GroupUsers (
                 groupId VARCHAR(255),
@@ -37,15 +39,18 @@ public class DatabaseHelper {
                 role VARCHAR(50), -- admin, instructor, student
                 canView BOOLEAN DEFAULT FALSE,
                 canAdmin BOOLEAN DEFAULT FALSE,
-                PRIMARY KEY (groupId, username)
+                PRIMARY KEY (groupId, username),
+                FOREIGN KEY (groupId) REFERENCES SpecialAccessGroups(groupId) ON DELETE CASCADE
             );
         """;
 
+        // Table to store articles in groups with cascading delete on group deletion
         String createGroupArticlesTable = """
             CREATE TABLE IF NOT EXISTS GroupArticles (
                 groupId VARCHAR(255),
                 articleId INT,
                 PRIMARY KEY (groupId, articleId),
+                FOREIGN KEY (groupId) REFERENCES SpecialAccessGroups(groupId) ON DELETE CASCADE,
                 FOREIGN KEY (articleId) REFERENCES Articles(id)
             );
         """;
@@ -56,6 +61,7 @@ public class DatabaseHelper {
             stmt.execute(createGroupArticlesTable);
         }
     }
+
 
     private void modifyGroupRights(String groupId, String column, boolean value) throws SQLException {
         String sql = """
@@ -102,6 +108,7 @@ public class DatabaseHelper {
         return checkGroupRights(groupId, "canAdmin");
     }
 
+
     public void addArticle(String title, String authors, String abstractText, String keywords, String body, String references, boolean isEncrypted) throws SQLException {
         String sql = "INSERT INTO Articles (title, authors, abstractText, keywords, body, references, isEncrypted) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -135,6 +142,7 @@ public class DatabaseHelper {
             }
         }
     }
+
 
 
     public List<String> listArticles() throws SQLException {
@@ -197,12 +205,22 @@ public class DatabaseHelper {
 
     public void deleteArticle(int displayId) throws SQLException {
         int articleId = getDatabaseIdForDisplayId(displayId);
-        String sql = "DELETE FROM Articles WHERE id = ?";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setInt(1, articleId);
-            pstmt.executeUpdate();
+
+        // Step 1: Delete references to the article in GroupArticles
+        String deleteFromGroupArticlesSQL = "DELETE FROM GroupArticles WHERE articleId = ?";
+        try (PreparedStatement pstmtGroupArticles = connection.prepareStatement(deleteFromGroupArticlesSQL)) {
+            pstmtGroupArticles.setInt(1, articleId);
+            pstmtGroupArticles.executeUpdate();
+        }
+
+        // Step 2: Delete the article from the Articles table
+        String deleteFromArticlesSQL = "DELETE FROM Articles WHERE id = ?";
+        try (PreparedStatement pstmtArticles = connection.prepareStatement(deleteFromArticlesSQL)) {
+            pstmtArticles.setInt(1, articleId);
+            pstmtArticles.executeUpdate();
         }
     }
+
 
     public void backupArticles(String backupFileName) throws SQLException {
         String backupSQL = String.format("SCRIPT TO '%s'", backupFileName);
@@ -411,27 +429,101 @@ public class DatabaseHelper {
     }
 
     public void addUserToGroup(String groupId, String username, String role) throws SQLException {
+        String sqlCheckAdmins = "SELECT COUNT(*) FROM GroupUsers WHERE groupId = ? AND canAdmin = TRUE";
         String sqlInsertOrUpdate = """
             MERGE INTO GroupUsers (groupId, username, role, canView, canAdmin)
             VALUES (?, ?, ?, ?, ?)
         """;
 
-        boolean isAdmin = false;
-        if (role.equalsIgnoreCase("Administrator")) {
-            isAdmin = true; // Admins get full access by default
+        try (PreparedStatement pstmtCheckAdmins = connection.prepareStatement(sqlCheckAdmins)) {
+            pstmtCheckAdmins.setString(1, groupId);
+            try (ResultSet rs = pstmtCheckAdmins.executeQuery()) {
+                boolean isFirstInstructor = false;
+
+                if (rs.next() && rs.getInt(1) == 0 && role.equalsIgnoreCase("Instructor")) {
+                    isFirstInstructor = true; // First instructor gets admin rights
+                }
+
+                try (PreparedStatement pstmtInsertOrUpdate = connection.prepareStatement(sqlInsertOrUpdate)) {
+                    pstmtInsertOrUpdate.setString(1, groupId);
+                    pstmtInsertOrUpdate.setString(2, username);
+                    pstmtInsertOrUpdate.setString(3, role); // Insert role
+                    pstmtInsertOrUpdate.setBoolean(4, false); // Can view
+                    pstmtInsertOrUpdate.setBoolean(5, isFirstInstructor); // Admin rights if first instructor
+                    pstmtInsertOrUpdate.executeUpdate();
+                }
+            }
+        }
+    }
+
+    
+    public List<Map<String, String>> getUsersInGroup(String groupId) throws SQLException {
+        String sql = """
+            SELECT gu.username, gu.role, gu.canView, gu.canAdmin
+            FROM GroupUsers gu
+            WHERE gu.groupId = ?
+        """;
+
+        List<Map<String, String>> users = new ArrayList<>();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, String> user = new HashMap<>();
+                    user.put("username", rs.getString("username"));
+                    user.put("role", rs.getString("role")); // Get role from the database
+                    user.put("canView", rs.getBoolean("canView") ? "Yes" : "No");
+                    user.put("canAdmin", rs.getBoolean("canAdmin") ? "Yes" : "No");
+                    users.add(user);
+                }
+            }
         }
 
-        try (PreparedStatement pstmt = connection.prepareStatement(sqlInsertOrUpdate)) {
-            pstmt.setString(1, groupId);
-            pstmt.setString(2, username);
-            pstmt.setString(3, role);
-            pstmt.setBoolean(4, true); // Can view
-            pstmt.setBoolean(5, isAdmin); // Admin rights only if role is Admin
+        return users;
+    }
+
+    public void updateUserViewRights(String groupId, String username, boolean canView) throws SQLException {
+        String sql = "UPDATE GroupUsers SET canView = ? WHERE groupId = ? AND username = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setBoolean(1, canView);
+            pstmt.setString(2, groupId);
+            pstmt.setString(3, username);
             pstmt.executeUpdate();
         }
     }
 
+    public void updateUserAdminRights(String groupId, String username, boolean canAdmin) throws SQLException {
+        // Count the number of current admins in the group
+        int adminCount = countAdminsInGroup(groupId);
 
+        // Prevent removing admin rights if it results in no admins in the group
+        if (!canAdmin && adminCount == 1) {
+            throw new SQLException("There must be at least one admin in the group.");
+        }
+
+        // Update the admin rights in the database
+        String sql = "UPDATE GroupUsers SET canAdmin = ? WHERE groupId = ? AND username = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setBoolean(1, canAdmin);
+            pstmt.setString(2, groupId);
+            pstmt.setString(3, username);
+            pstmt.executeUpdate();
+        }
+    }
+
+    public int countAdminsInGroup(String groupId) throws SQLException {
+        String sql = "SELECT COUNT(*) AS adminCount FROM GroupUsers WHERE groupId = ? AND canAdmin = TRUE";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("adminCount");
+                }
+            }
+        }
+        return 0; // Return 0 if no admins are found
+    }
 
     public void grantAdminRights(String groupId, String username) throws SQLException {
         updateUserPermissions(groupId, username, true, true);
@@ -471,39 +563,32 @@ public class DatabaseHelper {
         return users;
     }
     
-    public void addArticleToGroup(String groupId, int displayId, boolean encrypt) throws SQLException {
-        // Get the actual database ID for the given display ID
-        int articleId = getDatabaseIdForDisplayId(displayId);
+    public void addArticleToGroup(String groupId, int articleId, boolean isEncrypted) throws SQLException {
+        System.out.println("Attempting to add articleId: " + articleId + " to groupId: " + groupId);
 
-        // Check if the article exists in the database
-        String sqlCheckArticleExists = "SELECT COUNT(*) FROM Articles WHERE id = ?";
-        String sqlInsert = "INSERT INTO GroupArticles (groupId, articleId) VALUES (?, ?)";
-        String updateArticleSql = "UPDATE Articles SET isEncrypted = ? WHERE id = ?";
-
-        try (PreparedStatement pstmtCheckArticle = connection.prepareStatement(sqlCheckArticleExists)) {
-            pstmtCheckArticle.setInt(1, articleId);
-            try (ResultSet rs = pstmtCheckArticle.executeQuery()) {
-                if (rs.next() && rs.getInt(1) > 0) {
-                    // Article exists, proceed to insert and encrypt
-                    try (PreparedStatement pstmtInsert = connection.prepareStatement(sqlInsert);
-                         PreparedStatement pstmtUpdate = connection.prepareStatement(updateArticleSql)) {
-
-                        // Add the article to the group
-                        pstmtInsert.setString(1, groupId);
-                        pstmtInsert.setInt(2, articleId);
-                        pstmtInsert.executeUpdate();
-
-                        // Update encryption status for the article
-                        pstmtUpdate.setBoolean(1, encrypt);
-                        pstmtUpdate.setInt(2, articleId);
-                        pstmtUpdate.executeUpdate();
-                    }
-                } else {
-                    throw new SQLException("Article with ID " + displayId + " does not exist.");
+        // Check if the article exists
+        String checkArticleSql = "SELECT id FROM Articles WHERE id = ?";
+        try (PreparedStatement checkStmt = connection.prepareStatement(checkArticleSql)) {
+            checkStmt.setInt(1, articleId);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (!rs.next()) {
+                    System.out.println("Article with ID " + articleId + " not found in the database.");
+                    throw new SQLException("Article with ID " + articleId + " does not exist.");
                 }
+                System.out.println("Article with ID " + articleId + " exists in the database.");
             }
         }
+
+        // Add the article to the group
+        String sql = "INSERT INTO GroupArticles (groupId, articleId) VALUES (?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupId);
+            pstmt.setInt(2, articleId);
+            pstmt.executeUpdate();
+            System.out.println("Article with ID " + articleId + " successfully added to groupId: " + groupId);
+        }
     }
+
 
 
     
@@ -517,9 +602,7 @@ public class DatabaseHelper {
         """;
 
         List<Map<String, String>> articles = new ArrayList<>();
-        DatabaseHelper dbHelper = DatabaseHelper.getInstance();
-
-        try (PreparedStatement pstmt = dbHelper.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, groupId);
             pstmt.setString(2, username);
 
@@ -544,9 +627,39 @@ public class DatabaseHelper {
                 }
             }
         }
-
         return articles;
     }
 
+
+    public void deleteGroup(String groupId) throws SQLException {
+        String deleteGroupSQL = "DELETE FROM SpecialAccessGroups WHERE groupId = ?";
+
+        try (PreparedStatement pstmt = connection.prepareStatement(deleteGroupSQL)) {
+            pstmt.setString(1, groupId);
+            int rowsDeleted = pstmt.executeUpdate();
+
+            if (rowsDeleted == 0) {
+                throw new SQLException("No group found with ID: " + groupId);
+            }
+        }
+    }
+
+    public List<Map<String, String>> getAllGroups() throws SQLException {
+        String sql = "SELECT id AS groupId, name AS groupName FROM Groups";
+        List<Map<String, String>> groups = new ArrayList<>();
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+                Map<String, String> group = new HashMap<>();
+                group.put("groupId", rs.getString("groupId"));
+                group.put("groupName", rs.getString("groupName"));
+                groups.add(group);
+            }
+        }
+
+        return groups;
+    }
 
 }
