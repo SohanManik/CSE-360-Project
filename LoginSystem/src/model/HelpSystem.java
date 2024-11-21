@@ -5,6 +5,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A system for managing help messages submitted by students.
+ * Provides functionality to handle both generic messages and messages specific to queries/topics.
+ */
 public class HelpSystem {
 
     // Stores generic messages from students
@@ -25,7 +29,7 @@ public class HelpSystem {
     /**
      * Adds a specific help message with the student's query.
      *
-     * @param query The query/topic the student needs help with.
+     * @param query   The query/topic the student needs help with.
      * @param message The specific help message.
      */
     public static void sendSpecificMessage(String query, String message) {
@@ -35,7 +39,7 @@ public class HelpSystem {
     /**
      * Retrieves all generic help messages.
      *
-     * @return List of generic messages.
+     * @return A list of generic messages submitted by students.
      */
     public static List<String> getGenericMessages() {
         return new ArrayList<>(genericMessages);
@@ -45,7 +49,8 @@ public class HelpSystem {
      * Retrieves all specific help messages for a given query.
      *
      * @param query The query/topic to retrieve specific messages for.
-     * @return List of specific messages.
+     * @return A list of specific messages associated with the given query.
+     *         Returns an empty list if no messages are associated with the query.
      */
     public static List<String> getSpecificMessages(String query) {
         return specificMessages.getOrDefault(query, new ArrayList<>());
@@ -54,15 +59,15 @@ public class HelpSystem {
     /**
      * Retrieves a list of all queries/topics for which specific messages have been submitted.
      *
-     * @return List of query strings.
+     * @return A list of query strings representing topics with specific messages.
      */
     public static List<String> getSpecificQueries() {
         return new ArrayList<>(specificMessages.keySet());
     }
 
     /**
-     * Clears all stored help messages (generic and specific).
-     * Useful for testing or resetting the system.
+     * Clears all stored help messages (both generic and specific).
+     * This is useful for testing or resetting the system.
      */
     public static void clearHelpMessages() {
         genericMessages.clear();
