@@ -669,5 +669,44 @@ public class DatabaseHelper {
 
         return groups;
     }
+    
+    public boolean deleteUserFromGroup(String groupId, String username) throws SQLException {
+        String deleteSQL = "DELETE FROM ACCESSRIGHTS WHERE GROUPID = ? AND USERNAME = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(deleteSQL)) {
+            pstmt.setString(1, groupId);
+            pstmt.setString(2, username);
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0; // Returns true if a user was successfully deleted
+        }
+    }
+
+    public void backupGroups(String backupFileName) throws SQLException {
+        // Generate SQL script to back up the groups table
+        String backupSQL = String.format("SCRIPT TO '%s'", backupFileName);
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(backupSQL);
+        }
+    }
+
+    public void restoreGroups(String backupFileName) throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            // Drop the existing groups table to avoid conflicts during restore
+            stmt.execute("DROP TABLE IF EXISTS Groups");
+            // Run the SQL script to restore the groups table
+            stmt.execute(String.format("RUNSCRIPT FROM '%s'", backupFileName));
+        }
+    }
+    
+    public List<String> getAdminAccounts() throws SQLException {
+        String sql = "SELECT username FROM AccessRights WHERE canAdmin = TRUE";
+        List<String> admins = new ArrayList<>();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
+                admins.add(rs.getString("username"));
+            }
+        }
+        return admins;
+    }
 
 }

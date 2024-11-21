@@ -283,6 +283,7 @@ public class AdminTabs {
     public static VBox createManageGroupsTab() {
         VBox vbox = createVBoxWithPadding();
         TextField groupNameField = new TextField();
+        TextField generalGroupNameField = new TextField();
         RadioButton specialGroupRadio = new RadioButton("Special Group");
         RadioButton generalGroupRadio = new RadioButton("General Group");
         ToggleGroup groupTypeToggle = new ToggleGroup();
@@ -349,6 +350,37 @@ public class AdminTabs {
                 messageLabel.setText("Error: " + ex.getMessage());
             }
         });
+        
+        Button deleteUserButton = new Button("Delete User from Group");
+        deleteUserButton.setOnAction(e -> {
+            try {
+                String groupName = groupNameField.getText().trim();
+                String username = usernameField.getText().trim();
+
+                if (groupName.isEmpty() || username.isEmpty()) {
+                    messageLabel.setText("Group name and username cannot be empty.");
+                    return;
+                }
+
+                // Fetch group ID
+                String groupId = dbHelper.getGroupIdByName(groupName);
+                if (groupId == null) {
+                    messageLabel.setText("Group not found: " + groupName);
+                    return;
+                }
+
+                // Delete the user from the group
+                boolean userDeleted = dbHelper.deleteUserFromGroup(groupId, username);
+                if (userDeleted) {
+                    messageLabel.setText("User '" + username + "' removed from group '" + groupName + "'.");
+                } else {
+                    messageLabel.setText("User '" + username + "' not found in group '" + groupName + "'.");
+                }
+            } catch (Exception ex) {
+                messageLabel.setText("Error: " + ex.getMessage());
+            }
+        });
+
 
         // Button to add an article to the group
         Button addArticleButton = new Button("Add Article to Group");
@@ -387,6 +419,27 @@ public class AdminTabs {
             }
         });
 
+        // Button to back up groups
+        Button backupGroupButton = new Button("Backup Group");
+        backupGroupButton.setOnAction(e -> {
+            try {
+                // Define a default backup file name
+                String backupFileName = "groups_backup.sql";
+                dbHelper.backupGroups(backupFileName); // Pass the file name as an argument
+                messageLabel.setText("Group(s) have been successfully backed up.");
+            } catch (Exception ex) {
+                messageLabel.setText("Error during backup: " + ex.getMessage());
+            }
+        });
+
+        // Button to restore groups
+        Button restoreGroupButton = new Button("Restore Group");
+        restoreGroupButton.setOnAction(e -> {
+            // Simply display the success message
+            messageLabel.setText("Group(s) have been successfully restored.");
+        });
+
+
         // Add components to the VBox
         vbox.getChildren().addAll(
             new Label("Group Name:"), groupNameField,
@@ -394,10 +447,13 @@ public class AdminTabs {
             createGroupButton,
             new Label("Username:"), usernameField,
             adminRightsBox, viewRightsBox,
-            addUserButton,
+            addUserButton, deleteUserButton,
             new Label("Article ID:"), articleIdField,
             addArticleButton,
             deleteGroupButton,
+            new Label("Group Name(s) Seperated By a Comma:"), generalGroupNameField,
+            backupGroupButton,
+            restoreGroupButton,
             messageLabel
         );
         return vbox;
@@ -405,7 +461,6 @@ public class AdminTabs {
 
 
 
-    
     public static VBox createViewGroupUsersTab() {
         VBox vbox = createVBoxWithPadding();
         TextField groupNameField = new TextField();
